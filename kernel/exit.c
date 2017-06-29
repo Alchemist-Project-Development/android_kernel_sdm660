@@ -839,7 +839,8 @@ void __noreturn do_exit(long code)
 	 * an exiting task cleaning up the robust pi futexes.
 	 */
 	smp_mb();
-	raw_spin_unlock_wait(&tsk->pi_lock);
+	raw_spin_lock_irq(&tsk->pi_lock);
+	raw_spin_unlock_irq(&tsk->pi_lock);
 
 	schedtune_exit_task(tsk);
 
