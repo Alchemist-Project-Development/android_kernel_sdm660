@@ -330,29 +330,25 @@ bool rwsem_spin_on_owner(struct rw_semaphore *sem, struct task_struct *owner)
 {
 	long count;
 
-	while (true) {
-		bool on_cpu, same_owner;
-
+	rcu_read_lock();
+	while (sem->owner == owner) {
 		/*
-		 * Ensure sem->owner still matches owner. If that fails,
+		 * Ensure we emit the owner->on_cpu, dereference _after_
+		 * checking sem->owner still matches owner, if that fails,
 		 * owner might point to free()d memory, if it still matches,
 		 * the rcu_read_lock() ensures the memory stays valid.
 		 */
-		rcu_read_lock();
-		same_owner = sem->owner == owner;
-		if (same_owner)
-			on_cpu = owner->on_cpu;
-		rcu_read_unlock();
-
-		if (!same_owner)
-			break;
+		barrier();
 
 		/* abort spinning when need_resched or owner is not running */
-		if (!on_cpu || need_resched())
+		if (!owner->on_cpu || need_resched()) {
+			rcu_read_unlock();
 			return false;
+		}
 
 		cpu_relax_lowlatency();
 	}
+	rcu_read_unlock();
 
 	if (READ_ONCE(sem->owner))
 		return true; /* new owner, continue spinning */
